@@ -2,13 +2,11 @@ import arcpy
 from arcpy.sa import Raster
 import os
 
-clipping_raster = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb\ecoregion_subset_extent"
+test_using_ecoergion_subset = True
+ecoregion_subset = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb\ecoregion_subset_extent"
 
-arcpy.env.extent = clipping_raster
-arcpy.env.mask = clipping_raster
-
-above_ground_carbon_full_extent = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
-forest_full_extent = r"\\loxodonta\gis\Source_Data\biota\global\Mackey_Global_Forest_Data_FAO_Structural_Forms\FAO_structural_forms\Structural_forms_for_FAO_report.tif"
+above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
+forest = r"\\loxodonta\gis\Source_Data\biota\global\Mackey_Global_Forest_Data_FAO_Structural_Forms\FAO_structural_forms\Structural_forms_for_FAO_report.tif"
 biomes_and_ecoregions = r"\\loxodonta\gis\Source_Data\boundaries\global\RESOLVE_Biomes_and_Ecoregions\2017\RESOLVE_Feature_Service_Export.gdb\RESOLVE_Biomes_and_Ecoregions_2017"
 
 input_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs"
@@ -23,32 +21,43 @@ output_gdb = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\
 scratch_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch"
 scratch_gdb = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch\Scratch.gdb"
 
+high_priority_forest_carbon_output = output_gdb + os.sep + "high_priority_forest_carbon_50th_percentile"
+
 
 arcpy.env.overwriteOutput = True
 
+arcpy.env.snapRaster = forest
 
-above_ground_carbon = input_dir + os.sep + "aboveground_biomass_carbon_2010_forest_clip.tif"
-forest = input_dir + os.sep + "Structural_forms_for_FAO_report_clip.tif"
+def create_clipped_inputs(above_ground_carbon, forest):
 
-arcpy.env.snapRaster = forest_full_extent
+    """ Clips the carbon and the forest pixels to a subset of ecoregions for testing on a smaller extent. """
 
-def create_clipped_inputs(above_ground_carbon_full_extent, forest_full_extent):
-    print("Creating clipped carbon...")
-    above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon_full_extent, clipping_raster)
-    above_ground_carbon_r.save(above_ground_carbon)
+    print("\nClipping data testing for testing...")
 
-    print("Creating clipped forest...")
-    arcpy.env.snapRaster = forest_full_extent
-    forest_r = arcpy.sa.ExtractByMask(forest_full_extent, clipping_raster)
-    forest_r.save(forest)
+    above_ground_carbon_clip = input_dir + os.sep + "aboveground_biomass_carbon_2010_forest_clip.tif"
+    forest_clip = input_dir + os.sep + "Structural_forms_for_FAO_report_clip.tif"
+
+    arcpy.env.extent = ecoregion_subset
+    arcpy.env.mask = ecoregion_subset
+
+    print(" -> Creating clipped carbon...")
+    above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon, ecoregion_subset)
+    above_ground_carbon_r.save(above_ground_carbon_clip)
+
+    print(" -> Creating clipped forest...")
+    arcpy.env.snapRaster = forest
+    forest_r = arcpy.sa.ExtractByMask(forest, ecoregion_subset)
+    forest_r.save(forest_clip)
+
+    return above_ground_carbon_clip, forest_clip
 
 
 above_ground_forest_carbon = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Carbon\aboveground_biomass_carbon_2010_forest.tif"
 
 
-def clip_carbon_to_forest(above_ground_carbon, forest):
+def clip_carbon_to_forest_pixels(above_ground_carbon, forest):
 
-    print("Creating above ground forest carbon....")
+    print("\nCreating above ground forest carbon....")
 
     arcpy.env.cellSize = 0.00277777777777778
     d = arcpy.Describe(above_ground_carbon)
@@ -64,7 +73,7 @@ forest_reclassified = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_go
 
 def reclassify_forests(forest):
 
-    print("Reclassifying forest...")
+    print("\nReclassifying forest...")
 
     forest_reclasified_r = arcpy.sa.Reclassify(
         in_raster=forest,
@@ -80,7 +89,7 @@ zones = intermediate_gdb + os.sep + "ecoregions_and_forest_zones"
 
 def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
 
-    print("Creating zones by combining rasterized ecoregions and reclassified forests")
+    print("\nCreating zones by combining rasterized ecoregions and reclassified forests")
 
     arcpy.env.snapRaster = forest_reclassified
     ecoregions_raster = intermediate_gdb + os.sep + "ecoregions_raster"
@@ -111,7 +120,7 @@ thresholds_raster = intermediate_gdb + os.sep + "carbon_thresholds_50th_percenti
 
 def calc_percentile_threshold(zones, zone_field, input_value_raster, percentile_threshold):
 
-    print("Calculating percentile threshold within each zone...")
+    print("\nCalculating percentile threshold within each zone...")
 
     arcpy.env.snapRaster = zones
 
@@ -136,7 +145,7 @@ carbon_in_each_forest_cell = intermediate_gdb + os.sep + "carbon_in_each_forest_
 
 def calc_carbon_in_each_forest_cell(forest, above_ground_forest_carbon):
 
-    print("Calculating carbon in each forest cell....")
+    print("\nCalculating carbon in each forest cell....")
 
     arcpy.env.snapRaster = forest
 
@@ -172,18 +181,18 @@ def calc_carbon_in_each_forest_cell(forest, above_ground_forest_carbon):
     carbon_in_each_forest_cell_r.save(carbon_in_each_forest_cell)
 
 
-high_priority_forest_carbon = output_gdb + os.sep + "high_priority_forest_carbon_50th_percentile"
-
-
 def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
-    print("Creating High Priority Forest Carbon....")
+    print("\nCreating High Priority Forest Carbon....")
     arcpy.env.snapRaster = forest
     high_priority_forest_carbon_r = arcpy.sa.Con(Raster(carbon_in_each_forest_cell) > Raster(thresholds_raster), carbon_in_each_forest_cell)
-    high_priority_forest_carbon_r.save(high_priority_forest_carbon)
+    high_priority_forest_carbon_r.save(high_priority_forest_carbon_output)
 
-#create_clipped_inputs(above_ground_carbon_full_extent, forest_full_extent)
-#clip_carbon_to_forest(above_ground_carbon, forest)
+
+if test_using_ecoergion_subset:
+    above_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, forest)
+
+#clip_carbon_to_forest_pixels(above_ground_carbon, forest)
 reclassify_forests(forest)
 create_zones(biomes_and_ecoregions, "ECO_NAME", forest)
 calc_percentile_threshold(zones, "Value", above_ground_forest_carbon, percentile_threshold=50)
