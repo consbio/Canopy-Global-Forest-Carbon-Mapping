@@ -21,9 +21,9 @@ output_gdb = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\
 scratch_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch"
 scratch_gdb = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch\Scratch.gdb"
 
+# Final Output:
 version_label = "50th_percentile"
 high_priority_forest_carbon_output = output_gdb + os.sep + "high_priority_forest_carbon_" + version_label
-
 
 arcpy.env.overwriteOutput = True
 arcpy.env.snapRaster = forest
@@ -89,7 +89,7 @@ zones = intermediate_gdb + os.sep + "ecoregions_and_forest_zones_" + version_lab
 
 def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
 
-    print("\nCreating zones by combining rasterized ecoregions and reclassified forests")
+    print("\nCreating zones by combining rasterized ecoregions and reclassified forests...")
 
     arcpy.env.snapRaster = forest_reclassified
     ecoregions_raster = intermediate_gdb + os.sep + "ecoregions_raster_" + version_label
@@ -111,7 +111,6 @@ def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
     print(" -> Combining rasterized ecoregions and forests...")
 
     zones_r = arcpy.sa.Combine([ecoregions_raster, forest_reclassified])
-
     zones_r.save(zones)
 
 
@@ -190,9 +189,9 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
 
 if test_using_ecoergion_subset:
-    clip_carbon_to_forest_pixels(above_ground_carbon, forest)
     above_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, forest)
 
+clip_carbon_to_forest_pixels(above_ground_carbon, forest)
 reclassify_forests(forest)
 create_zones(biomes_and_ecoregions, "ECO_NAME", forest)
 calc_percentile_threshold(zones, "Value", above_ground_forest_carbon, percentile_threshold=50)
