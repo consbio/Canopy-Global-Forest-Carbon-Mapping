@@ -2,8 +2,8 @@ import arcpy
 from arcpy.sa import Raster
 import os
 
-test_using_ecoergion_subset = True
-ecoregion_subset = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb\ecoregion_subset_extent"
+clip_inputs_for_testing = True
+clipping_features = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb\clipping_features_extent"
 
 above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
 below_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\belowground_biomass_carbon_2010.tif"
@@ -31,30 +31,30 @@ arcpy.env.overwriteOutput = True
 arcpy.env.snapRaster = forest
 
 
-def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest):
+def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features):
 
     """ Clips the carbon and the forest pixels to a subset of ecoregions for testing on a smaller extent. """
 
     print("\nClipping data testing for testing...")
 
+    arcpy.env.extent = clipping_features
+    arcpy.env.mask = clipping_features
+
     above_ground_carbon_clip = input_dir + os.sep + "aboveground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
     below_ground_carbon_clip = input_dir + os.sep + "belowground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
     forest_clip = input_dir + os.sep + "Structural_forms_for_FAO_report_clip_" + version_label + ".tif"
 
-    arcpy.env.extent = ecoregion_subset
-    arcpy.env.mask = ecoregion_subset
-
     print(" -> Creating clipped above ground carbon...")
-    above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon, ecoregion_subset)
+    above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon, clipping_features)
     above_ground_carbon_r.save(above_ground_carbon_clip)
 
     print(" -> Creating clipped below ground carbon...")
-    below_ground_carbon_r = arcpy.sa.ExtractByMask(below_ground_carbon, ecoregion_subset)
+    below_ground_carbon_r = arcpy.sa.ExtractByMask(below_ground_carbon, clipping_features)
     below_ground_carbon_r.save(below_ground_carbon_clip)
 
     print(" -> Creating clipped forest...")
     arcpy.env.snapRaster = forest
-    forest_r = arcpy.sa.ExtractByMask(forest, ecoregion_subset)
+    forest_r = arcpy.sa.ExtractByMask(forest, clipping_features)
     forest_r.save(forest_clip)
 
     return above_ground_carbon_clip, below_ground_carbon_clip, forest_clip
@@ -210,8 +210,8 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
     high_priority_forest_carbon_r.save(high_priority_forest_carbon_output)
 
 
-if test_using_ecoergion_subset:
-    above_ground_carbon, below_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest)
+if clip_inputs_for_testing:
+    above_ground_carbon, below_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features)
 
 combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
 clip_carbon_to_forest_pixels(combined_carbon, forest)
