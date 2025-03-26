@@ -23,6 +23,8 @@ output_gdb = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\
 scratch_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch"
 scratch_gdb = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch\Scratch.gdb"
 
+percentile_threshold = 50
+
 # Final Output:
 version_label = "50th_percentile"
 
@@ -221,7 +223,7 @@ combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
 clip_carbon_to_forest_pixels(combined_carbon, forest)
 reclassify_forests(forest)
 create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
-calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold=50)
+calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 calc_carbon_in_each_forest_cell(forest, combined_carbon)
 find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
 
