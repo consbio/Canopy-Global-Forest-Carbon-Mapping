@@ -1,41 +1,51 @@
 import arcpy
 from arcpy.sa import Raster
+import datetime
 import os
 
-clip_inputs_for_testing = True
-clipping_features = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb\ecoregion_subset_extent"
-
+# Source Data
 above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
 below_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\belowground_biomass_carbon_2010.tif"
-
 forest = r"\\loxodonta\gis\Source_Data\biota\global\Mackey_Global_Forest_Data_FAO_Structural_Forms\FAO_structural_forms\Structural_forms_for_FAO_report.tif"
 biomes_and_ecoregions = r"\\loxodonta\gis\Source_Data\boundaries\global\RESOLVE_Biomes_and_Ecoregions\2017\RESOLVE_Feature_Service_Export.gdb\RESOLVE_Biomes_and_Ecoregions_2017"
 
-input_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs"
-input_gdb = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs"
-
-intermediate_dir = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate"
-intermediate_gdb = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Intermediate.gdb"
-
-output_dir = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Outputs"
-output_gdb = "P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Outputs\Outputs.gdb"
-
-scratch_dir = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch"
-scratch_gdb = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Inputs\Scratch\Scratch.gdb"
-
+# Input Parameters
+clip_inputs_for_testing = True
 percentile_threshold = 50
-
-# Final Output:
 version_label = "50th_percentile"
 
+# Data Directory
+data_dir = os.path.join(r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data")
+
 if clip_inputs_for_testing:
+    # Set Test Directory
+    data_dir = os.path.join(data_dir, "Test")
+    # Clipping Features for Testing
+    clipping_features = os.path.join(data_dir, "Inputs\Inputs.gdb\ecoregion_subset_extent")
+    # Append to version label
     version_label += "_subset"
 
+# Data Sub-Directories
+input_dir = os.path.join(data_dir, "Inputs")
+input_gdb = os.path.join(data_dir, "Inputs")
+
+intermediate_dir = os.path.join(data_dir, "Intermediate")
+intermediate_gdb = os.path.join(data_dir, r"Intermediate\Intermediate.gdb")
+
+output_dir = os.path.join(data_dir, "Outputs")
+output_gdb = os.path.join(data_dir, r"Outputs\Outputs.gdb")
+
+scratch_dir = os.path.join(data_dir, r"Inputs\Scratch")
+scratch_gdb = os.path.join(data_dir, r"Inputs\Scratch\Scratch.gdb")
+
+# Final Output
 high_priority_forest_carbon_output = output_gdb + os.sep + "high_priority_forest_carbon_" + version_label
 
 arcpy.env.overwriteOutput = True
 arcpy.env.snapRaster = forest
 
+start_time = datetime.datetime.now()
+print("\nStart Time: " + str(start_time))
 
 def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features):
 
@@ -71,7 +81,7 @@ combined_carbon = intermediate_dir + os.sep + "combined_carbon_" + version_label
 
 def combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon):
 
-    """ Combines above and below ground carbon """
+    """ 1. Combines above and below ground carbon by adding them together. """
 
     print("\nCombining aboveground and belowground carbon...")
 
@@ -84,9 +94,10 @@ combined_forest_carbon = input_dir + os.path.sep + "combined_forest_carbon_" + v
 
 def clip_carbon_to_forest_pixels(carbon, forest):
 
+    """ 2. Clips carbon to the forest pixels. """
+
     print("\nClipping carbon to forest pixels....")
 
-    arcpy.env.cellSize = 0.00277777777777778
     d = arcpy.Describe(carbon)
     cell_size = d.children[0].meanCellHeight
     arcpy.env.cellSize = cell_size
@@ -100,21 +111,25 @@ forest_reclassified = intermediate_gdb + os.path.sep + "forest_reclassified_" + 
 
 def reclassify_forests(forest):
 
+    """ 3. Reclassifies the forest pixels into classes specified by Jim Strittholt. """
+
     print("\nReclassifying forest...")
 
-    forest_reclasified_r = arcpy.sa.Reclassify(
+    forest_reclassified_r = arcpy.sa.Reclassify(
         in_raster=forest,
         reclass_field="Value",
         remap="1 1;2 1;3 1;4 2;5 2;6 2;7 3;8 3;9 3;10 4;11 4;12 4",
         missing_values="DATA"
     )
-    forest_reclasified_r.save(forest_reclassified)
+    forest_reclassified_r.save(forest_reclassified)
 
 
 zones = intermediate_gdb + os.sep + "ecoregions_and_forest_zones_" + version_label
 
 
 def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
+
+    """ 4. Creates zones by combining rasterized ecoregions and reclassified forests. """
 
     print("\nCreating zones by combining rasterized ecoregions and reclassified forests...")
 
@@ -146,6 +161,8 @@ thresholds_raster = intermediate_gdb + os.sep + "combined_carbon_thresholds_" + 
 
 def calc_percentile_threshold(zones, zone_field, input_value_raster, percentile_threshold):
 
+    """ 5. Calculating percentile threshold within each zone using zonal statistics. """
+
     print("\nCalculating percentile threshold within each zone...")
 
     arcpy.env.snapRaster = zones
@@ -170,6 +187,8 @@ carbon_in_each_forest_cell = intermediate_gdb + os.sep + "carbon_in_each_forest_
 
 
 def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
+
+    """ 6. Calculates carbon in each forest cell using zonal statistics (MEAN). """
 
     print("\nCalculating carbon in each forest cell....")
 
@@ -210,6 +229,8 @@ def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
 
 def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
+    """ 7. Creates High Priority Forest Carbon (Final Output) by selecting carbon pixels above the threshold. """
+
     print("\nCreating High Priority Forest Carbon....")
     arcpy.env.snapRaster = forest
     high_priority_forest_carbon_r = arcpy.sa.Con(Raster(carbon_in_each_forest_cell) > Raster(thresholds_raster), carbon_in_each_forest_cell)
@@ -226,4 +247,10 @@ create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
 calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 calc_carbon_in_each_forest_cell(forest, combined_carbon)
 find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
+
+end_time = datetime.datetime.now()
+duration = end_time - start_time
+print("Start Time: " + str(start_time))
+print("End Time: " + str(end_time))
+print("Duration: " + str(duration))
 
