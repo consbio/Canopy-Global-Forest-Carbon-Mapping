@@ -10,7 +10,7 @@ forest = r"\\loxodonta\gis\Source_Data\biota\global\Mackey_Global_Forest_Data_FA
 biomes_and_ecoregions = r"\\loxodonta\gis\Source_Data\boundaries\global\RESOLVE_Biomes_and_Ecoregions\2017\RESOLVE_Feature_Service_Export.gdb\RESOLVE_Biomes_and_Ecoregions_2017"
 
 # Input Parameters
-clip_inputs_for_testing = True
+clip_inputs_for_testing = False
 percentile_threshold = 50
 version_label = "50th_percentile"
 
@@ -42,10 +42,12 @@ scratch_gdb = os.path.join(data_dir, r"Inputs\Scratch\Scratch.gdb")
 high_priority_forest_carbon_output = output_gdb + os.sep + "high_priority_forest_carbon_" + version_label
 
 arcpy.env.overwriteOutput = True
-arcpy.env.snapRaster = forest
+#arcpy.env.snapRaster = forest
 
 start_time = datetime.datetime.now()
 print("\nStart Time: " + str(start_time))
+
+
 
 def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features):
 
@@ -53,25 +55,28 @@ def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clip
 
     print("\nClipping data testing for testing...")
 
-    arcpy.env.extent = clipping_features
-    arcpy.env.mask = clipping_features
+    #arcpy.env.extent = clipping_features
+    #arcpy.env.mask = clipping_features
 
-    above_ground_carbon_clip = input_dir + os.sep + "aboveground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
-    below_ground_carbon_clip = input_dir + os.sep + "belowground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
-    forest_clip = input_dir + os.sep + "Structural_forms_for_FAO_report_clip_" + version_label + ".tif"
+    with arcpy.EnvManager(snapRaster=above_ground_carbon):
 
-    print(" -> Creating clipped aboveground carbon...")
-    above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon, clipping_features)
-    above_ground_carbon_r.save(above_ground_carbon_clip)
+        above_ground_carbon_clip = input_dir + os.sep + "aboveground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
+        below_ground_carbon_clip = input_dir + os.sep + "belowground_biomass_carbon_2010_forest_clip_" + version_label + ".tif"
+        forest_clip = input_dir + os.sep + "Structural_forms_for_FAO_report_clip_" + version_label + ".tif"
 
-    print(" -> Creating clipped belowground carbon...")
-    below_ground_carbon_r = arcpy.sa.ExtractByMask(below_ground_carbon, clipping_features)
-    below_ground_carbon_r.save(below_ground_carbon_clip)
+        print(" -> Creating clipped aboveground carbon...")
+        above_ground_carbon_r = arcpy.sa.ExtractByMask(above_ground_carbon, clipping_features)
+        above_ground_carbon_r.save(above_ground_carbon_clip)
 
-    print(" -> Creating clipped forest...")
-    arcpy.env.snapRaster = forest
-    forest_r = arcpy.sa.ExtractByMask(forest, clipping_features)
-    forest_r.save(forest_clip)
+        print(" -> Creating clipped belowground carbon...")
+        below_ground_carbon_r = arcpy.sa.ExtractByMask(below_ground_carbon, clipping_features)
+        below_ground_carbon_r.save(below_ground_carbon_clip)
+
+    with arcpy.EnvManager(snapRaster=forest):
+
+        print(" -> Creating clipped forest...")
+        forest_r = arcpy.sa.ExtractByMask(forest, clipping_features)
+        forest_r.save(forest_clip)
 
     return above_ground_carbon_clip, below_ground_carbon_clip, forest_clip
 
@@ -85,11 +90,12 @@ def combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon):
 
     print("\nCombining aboveground and belowground carbon...")
 
-    combined_carbon_r = arcpy.sa.Plus(above_ground_carbon, below_ground_carbon)
-    combined_carbon_r.save(combined_carbon)
+    with arcpy.EnvManager(snapRaster=above_ground_carbon):
+        combined_carbon_r = arcpy.sa.Plus(above_ground_carbon, below_ground_carbon)
+        combined_carbon_r.save(combined_carbon)
 
 
-combined_forest_carbon = input_dir + os.path.sep + "combined_forest_carbon_" + version_label + ".tif"
+combined_forest_carbon = intermediate_dir + os.path.sep + "combined_forest_carbon_" + version_label + ".tif"
 
 
 def clip_carbon_to_forest_pixels(carbon, forest):
@@ -100,10 +106,13 @@ def clip_carbon_to_forest_pixels(carbon, forest):
 
     d = arcpy.Describe(carbon)
     cell_size = d.children[0].meanCellHeight
-    arcpy.env.cellSize = cell_size
-    arcpy.env.snapRaster = carbon
-    forest_carbon_r = arcpy.sa.ExtractByMask(carbon, forest)
-    forest_carbon_r.save(combined_forest_carbon)
+
+    with arcpy.EnvManager(cellSize=cell_size, snapRaster=carbon):
+
+        arcpy.env.cellSize = cell_size
+        arcpy.env.snapRaster = carbon
+        forest_carbon_r = arcpy.sa.ExtractByMask(carbon, forest)
+        forest_carbon_r.save(combined_forest_carbon)
 
 
 forest_reclassified = intermediate_gdb + os.path.sep + "forest_reclassified_" + version_label
@@ -111,17 +120,20 @@ forest_reclassified = intermediate_gdb + os.path.sep + "forest_reclassified_" + 
 
 def reclassify_forests(forest):
 
+
     """ 3. Reclassifies the forest pixels into classes specified by Jim Strittholt. """
 
     print("\nReclassifying forest...")
 
-    forest_reclassified_r = arcpy.sa.Reclassify(
-        in_raster=forest,
-        reclass_field="Value",
-        remap="1 1;2 1;3 1;4 2;5 2;6 2;7 3;8 3;9 3;10 4;11 4;12 4",
-        missing_values="DATA"
-    )
-    forest_reclassified_r.save(forest_reclassified)
+    with arcpy.EnvManager(snapRaster=forest):
+
+        forest_reclassified_r = arcpy.sa.Reclassify(
+            in_raster=forest,
+            reclass_field="Value",
+            remap="1 1;2 1;3 1;4 2;5 2;6 2;7 3;8 3;9 3;10 4;11 4;12 4",
+            missing_values="DATA"
+        )
+        forest_reclassified_r.save(forest_reclassified)
 
 
 zones = intermediate_gdb + os.sep + "ecoregions_and_forest_zones_" + version_label
@@ -133,33 +145,37 @@ def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
 
     print("\nCreating zones by combining rasterized ecoregions and reclassified forests...")
 
-    arcpy.env.snapRaster = forest_reclassified
-    ecoregions_raster = intermediate_gdb + os.sep + "ecoregions_raster_" + version_label
+    d = arcpy.Describe(forest)
+    cell_size = d.children[0].meanCellHeight
 
-    if not arcpy.Exists(ecoregions_raster):
+    with arcpy.EnvManager(snapRaster=forest_reclassified, cellSize=cell_size):
 
-        print(" -> Converting ecoregions to raster...")
+        ecoregions_raster = intermediate_gdb + os.sep + "ecoregions_raster_" + version_label
 
-        arcpy.conversion.PolygonToRaster(
-            in_features=biomes_and_ecoregions,
-            value_field=value_field,
-            out_rasterdataset=ecoregions_raster,
-            cell_assignment="CELL_CENTER",
-            priority_field="NONE",
-            cellsize=0.008983152841195217,
-            build_rat="BUILD"
-        )
+        if not arcpy.Exists(ecoregions_raster):
 
-    print(" -> Combining rasterized ecoregions and reclassified forests...")
+            print(" -> Converting ecoregions to raster...")
 
-    zones_r = arcpy.sa.Combine([ecoregions_raster, forest_reclassified])
-    zones_r.save(zones)
+            arcpy.conversion.PolygonToRaster(
+                in_features=biomes_and_ecoregions,
+                value_field=value_field,
+                out_rasterdataset=ecoregions_raster,
+                cell_assignment="CELL_CENTER",
+                priority_field="NONE",
+                cellsize=cell_size,
+                build_rat="BUILD"
+            )
+
+        print(" -> Combining rasterized ecoregions and reclassified forests...")
+
+        zones_r = arcpy.sa.Combine([ecoregions_raster, forest_reclassified])
+        zones_r.save(zones)
 
 
 thresholds_raster = intermediate_gdb + os.sep + "combined_carbon_thresholds_" + version_label
 
 
-def calc_percentile_threshold(zones, zone_field, input_value_raster, percentile_threshold):
+def calc_percentile_threshold(zones, zone_field, carbon, percentile_threshold):
 
     """ 5. Calculating percentile threshold within each zone using zonal statistics. """
 
@@ -167,20 +183,22 @@ def calc_percentile_threshold(zones, zone_field, input_value_raster, percentile_
 
     arcpy.env.snapRaster = zones
 
-    percentile_r = arcpy.ia.ZonalStatistics(
-        in_zone_data=zones,
-        zone_field=zone_field,
-        in_value_raster=input_value_raster,
-        statistics_type="PERCENTILE",
-        ignore_nodata="DATA",
-        process_as_multidimensional="CURRENT_SLICE",
-        percentile_value=percentile_threshold,
-        percentile_interpolation_type="AUTO_DETECT",
-        circular_calculation="ARITHMETIC",
-        circular_wrap_value=360,
-    )
+    with arcpy.EnvManager(snapRaster=zones):
 
-    percentile_r.save(thresholds_raster)
+        percentile_r = arcpy.ia.ZonalStatistics(
+            in_zone_data=zones,
+            zone_field=zone_field,
+            in_value_raster=carbon,
+            statistics_type="PERCENTILE",
+            ignore_nodata="DATA",
+            process_as_multidimensional="CURRENT_SLICE",
+            percentile_value=percentile_threshold,
+            percentile_interpolation_type="AUTO_DETECT",
+            circular_calculation="ARITHMETIC",
+            circular_wrap_value=360,
+        )
+
+        percentile_r.save(thresholds_raster)
 
 
 carbon_in_each_forest_cell = intermediate_gdb + os.sep + "carbon_in_each_forest_cell_" + version_label
@@ -190,11 +208,13 @@ def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
 
     """ 6. Calculates carbon in each forest cell using zonal statistics (MEAN). """
 
-    print("\nCalculating carbon in each forest cell....")
-
     arcpy.env.snapRaster = forest
 
+    print("\nCalculating carbon in each forest cell....")
+
     print(" -> Converting forest pixels to points...")
+
+
     forest_points = scratch_gdb + os.sep + "forest_points"
     arcpy.conversion.RasterToPoint(
         in_raster=forest,
@@ -204,6 +224,7 @@ def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
 
     print(" -> Converting points to raster...")
     forest_raster = scratch_gdb + os.sep + "forest_raster"
+
     with arcpy.EnvManager(snapRaster=forest):
         arcpy.conversion.PointToRaster(
             in_features=forest_points,
@@ -215,16 +236,16 @@ def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
             build_rat="BUILD"
         )
 
-    print(" -> Calculating zonal statistics (carbon in each forest cell)...")
-    carbon_in_each_forest_cell_r = arcpy.sa.ZonalStatistics(
-        in_zone_data=forest_raster,
-        zone_field="Value",
-        in_value_raster=combined_forest_carbon,
-        statistics_type="MEAN",
-        ignore_nodata="DATA",
-    )
+        print(" -> Calculating zonal statistics (carbon in each forest cell)...")
+        carbon_in_each_forest_cell_r = arcpy.sa.ZonalStatistics(
+            in_zone_data=forest_raster,
+            zone_field="Value",
+            in_value_raster=combined_forest_carbon,
+            statistics_type="MEAN",
+            ignore_nodata="DATA",
+        )
 
-    carbon_in_each_forest_cell_r.save(carbon_in_each_forest_cell)
+        carbon_in_each_forest_cell_r.save(carbon_in_each_forest_cell)
 
 
 def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
@@ -232,9 +253,11 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
     """ 7. Creates High Priority Forest Carbon (Final Output) by selecting carbon pixels above the threshold. """
 
     print("\nCreating High Priority Forest Carbon....")
-    arcpy.env.snapRaster = forest
-    high_priority_forest_carbon_r = arcpy.sa.Con(Raster(carbon_in_each_forest_cell) > Raster(thresholds_raster), carbon_in_each_forest_cell)
-    high_priority_forest_carbon_r.save(high_priority_forest_carbon_output)
+
+    with arcpy.EnvManager(snapRaster=carbon_in_each_forest_cell):
+
+        high_priority_forest_carbon_r = arcpy.sa.Con(Raster(carbon_in_each_forest_cell) > Raster(thresholds_raster), carbon_in_each_forest_cell)
+        high_priority_forest_carbon_r.save(high_priority_forest_carbon_output)
 
 
 if clip_inputs_for_testing:
