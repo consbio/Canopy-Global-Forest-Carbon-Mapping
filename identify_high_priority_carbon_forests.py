@@ -39,14 +39,13 @@ scratch_dir = os.path.join(data_dir, r"Inputs\Scratch")
 scratch_gdb = os.path.join(data_dir, r"Inputs\Scratch\Scratch.gdb")
 
 # Final Output
-high_priority_forest_carbon_output = output_gdb + os.sep + "high_priority_forest_carbon_" + version_label
+high_priority_forest_carbon_output = output_dir + os.sep + "high_priority_forest_carbon_" + version_label + ".tif"
 
 arcpy.env.overwriteOutput = True
 #arcpy.env.snapRaster = forest
 
 start_time = datetime.datetime.now()
 print("\nStart Time: " + str(start_time))
-
 
 
 def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features):
@@ -276,4 +275,3 @@ duration = end_time - start_time
 print("Start Time: " + str(start_time))
 print("End Time: " + str(end_time))
 print("Duration: " + str(duration))
-
