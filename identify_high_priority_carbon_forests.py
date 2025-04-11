@@ -2,6 +2,7 @@ import arcpy
 from arcpy.sa import Raster
 import datetime
 import os
+import csv
 
 # Source Data
 above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
@@ -13,6 +14,17 @@ biomes_and_ecoregions = r"\\loxodonta\gis\Source_Data\boundaries\global\RESOLVE_
 clip_inputs_for_testing = False
 percentile_threshold = 50
 version_label = "50th_percentile"
+biomes_to_include = (
+    "Boreal Forests/Taiga",
+    "Temperate Broadleaf & Mixed Forests",
+    "Temperate Conifer Forests",
+    "Tropical & Subtropical Coniferous Forests",
+    "Tropical & Subtropical Dry Broadleaf Forests",
+    "Tropical & Subtropical Moist Broadleaf Forests",
+)
+
+ecoregions_of_interest_csv = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Docs\ecoregions_of_interest.csv"
+
 
 # Data Directory
 data_dir = os.path.join(r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data")
@@ -39,7 +51,8 @@ scratch_dir = os.path.join(data_dir, r"Inputs\Scratch")
 scratch_gdb = os.path.join(data_dir, r"Inputs\Scratch\Scratch.gdb")
 
 # Final Output
-high_priority_forest_carbon_output = output_dir + os.sep + "high_priority_forest_carbon_" + version_label + ".tif"
+final_output = output_dir + os.sep + "high_priority_forest_carbon_" + version_label + ".tif"
+final_output_filtered = output_dir + os.sep + "high_priority_forest_carbon_filtered_" + version_label + ".tif"
 
 arcpy.env.overwriteOutput = True
 #arcpy.env.snapRaster = forest
@@ -256,19 +269,100 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
     with arcpy.EnvManager(snapRaster=carbon_in_each_forest_cell):
 
         high_priority_forest_carbon_r = arcpy.sa.Con(Raster(carbon_in_each_forest_cell) > Raster(thresholds_raster), carbon_in_each_forest_cell)
-        high_priority_forest_carbon_r.save(high_priority_forest_carbon_output)
+        high_priority_forest_carbon_r.save(final_output)
+
+
+def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
+
+    # BIOMES to use (Select biomes specified in the input parameter):
+    biomes_to_use_fc = os.path.join(intermediate_gdb, "biomes_to_use_" + version_label)
+    query = "BIOME_NAME IN {}".format(biomes_to_include)
+    arcpy.Select_analysis(ecoregions_and_biomes, biomes_to_use_fc, query)
+
+    # ECOREGIONS to use (Select ecoregions interest in the CSV that are > MEDIAN carbon value among ecoregions of interest)
+
+    # Get Ecoregions of Interest from the CSV
+    ecoregions_of_interest = []
+    with open(ecoregions_of_interest_csv) as f:
+        reader = csv.reader(f)
+        for row in reader:
+            ecoregion = row[0]
+            ecoregions_of_interest.append(ecoregion)
+        print(ecoregions_of_interest)
+
+    ecoregions_of_interest_tuple = tuple(ecoregions_of_interest)
+
+    # Create an Ecoregions of Interest Feature Class
+    query = "ECO_NAME IN {}".format(ecoregions_of_interest_tuple)
+    ecoregions_of_interest_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_fc_" + version_label)
+    arcpy.Select_analysis(biomes_and_ecoregions, ecoregions_of_interest_fc, query)
+
+    # Calc zonal stats to get the SUM of the carbon density values within each ecoregion
+    ecoregions_of_interest_zonal_stats = os.path.join(intermediate_gdb, "ecoregions_of_interest_zonal_stats" + version_label)
+    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats)
+
+    # Calculate the MEDIAN from the Zonal stats table created above (single number).
+    median_zonal_carbon_table = os.path.join(intermediate_gdb, "median_zonal_carbon_table_" + version_label)
+    arcpy.analysis.Statistics(
+        in_table=ecoregions_of_interest_zonal_stats,
+        out_table=median_zonal_carbon_table,
+        statistics_fields="SUM MEDIAN",
+        case_field=None,
+        concatenation_separator=""
+    )
+
+    # Get the MEDIAN value out of the table.
+    with arcpy.da.SearchCursor(median_zonal_carbon_table, "MEDIAN_SUM") as sc:
+        for row in sc:
+            median_zonal_carbon = row[0]
+        print("Median Zonal Value Threshold: " + str(median_zonal_carbon))
+
+    # Get a list of the ecoregions that are > MEDIAN
+
+    # Create a table view that has the ecroegion names of those > MEDIAN
+    query = "SUM > {}".format(median_zonal_carbon)
+    median_zonal_carbon_table_view = arcpy.MakeTableView_management(ecoregions_of_interest_zonal_stats)
+
+    ecoregions_of_interest_to_use = arcpy.management.SelectLayerByAttribute(
+        in_layer_or_view=median_zonal_carbon_table_view,
+        selection_type="NEW_SELECTION",
+        where_clause=query,
+        invert_where_clause=None
+    )
+
+    # Get a list of the ecoregion names where the SUM of the carbon is > MEDIAN
+    list_of_ecoregions_to_use = []
+    with arcpy.da.SearchCursor(ecoregions_of_interest_to_use, "ECO_NAME") as sc:
+        for row in sc:
+            ecoregion_region_to_use_name = row[0]
+            list_of_ecoregions_to_use.append(ecoregion_region_to_use_name)
+
+    # Ecoregions to Use: Select the ecoregions of interest where the SUM of the carbon > MEDIAN to create a new feature class
+    query = "ECO_NAME in {}".format(tuple(list_of_ecoregions_to_use))
+    ecoregions_of_interest_to_use_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_to_use_" + version_label)
+    arcpy.Select_analysis(biomes_and_ecoregions, ecoregions_of_interest_to_use_fc, query)
+
+    # Combine (Union) the Ecoregions to Use with the Biomes to use to create the final mask.
+    biome_and_ecoregion_mask = os.path.join(intermediate_gdb, "biome_and_ecoregion_mask_" + version_label)
+    arcpy.Union_analysis([biomes_to_use_fc, ecoregions_of_interest_to_use_fc], biome_and_ecoregion_mask)
+
+    # Extract carbon values within the final mask.
+    final_output_filtered_l = arcpy.sa.ExtractByMask(final_output, biome_and_ecoregion_mask)
+    final_output_filtered_l.save(final_output_filtered)
 
 
 if clip_inputs_for_testing:
     above_ground_carbon, below_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features)
 
-combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
-clip_carbon_to_forest_pixels(combined_carbon, forest)
-reclassify_forests(forest)
-create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
-calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
-calc_carbon_in_each_forest_cell(forest, combined_carbon)
-find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
+#combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
+#clip_carbon_to_forest_pixels(combined_carbon, forest)
+#reclassify_forests(forest)
+#create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
+#calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
+#calc_carbon_in_each_forest_cell(forest, combined_carbon)
+#find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
+
+filter_output(final_output, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
 
 end_time = datetime.datetime.now()
 duration = end_time - start_time
