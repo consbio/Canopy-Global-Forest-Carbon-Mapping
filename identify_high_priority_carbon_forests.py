@@ -4,6 +4,11 @@ import datetime
 import os
 import csv
 
+#Run from Python window in Pro:
+#with open(script_path, 'r') as f:
+#    script_code = f.read()
+#    exec(script_code)
+
 # Source Data
 above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
 below_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\belowground_biomass_carbon_2010.tif"
