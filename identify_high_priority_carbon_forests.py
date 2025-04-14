@@ -288,18 +288,18 @@ def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoreg
         for row in reader:
             ecoregion = row[0]
             ecoregions_of_interest.append(ecoregion)
-        print(ecoregions_of_interest)
+        print("Ecoregions of interest from CSV: " + str(ecoregions_of_interest))
 
     ecoregions_of_interest_tuple = tuple(ecoregions_of_interest)
 
     # Create an Ecoregions of Interest Feature Class
     query = "ECO_NAME IN {}".format(ecoregions_of_interest_tuple)
-    ecoregions_of_interest_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_fc_" + version_label)
+    ecoregions_of_interest_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_" + version_label)
     arcpy.Select_analysis(biomes_and_ecoregions, ecoregions_of_interest_fc, query)
 
-    # Calc zonal stats to get the SUM of the carbon density values within each ecoregion
+    # Calc ZONAL STATS to get the SUM of the carbon density values within each ecoregion
     ecoregions_of_interest_zonal_stats = os.path.join(intermediate_gdb, "ecoregions_of_interest_zonal_stats" + version_label)
-    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats)
+    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats, "DATA")
 
     # Calculate the MEDIAN from the Zonal stats table created above (single number).
     median_zonal_carbon_table = os.path.join(intermediate_gdb, "median_zonal_carbon_table_" + version_label)
@@ -350,6 +350,24 @@ def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoreg
     final_output_filtered_l = arcpy.sa.ExtractByMask(final_output, biome_and_ecoregion_mask)
     final_output_filtered_l.save(final_output_filtered)
 
+def calculate_density(final_output_filtered):
+
+    raster_to_point_fc = os.path.join(intermediate_dir, "Scratch/Scratch.gdb/raster_to_point_test")
+    arcpy.conversion.RasterToPoint( in_raster=final_output_filtered, out_point_features=raster_to_point_fc, raster_field="Value" )
+    d = arcpy.Describe(final_output_filtered)
+    cell_size = d.children[0].meanCellHeight * 10
+
+    carbon_density_output = arcpy.sa.PointDensity(
+        in_point_features=raster_to_point_fc,
+        population_field="grid_code",
+        cell_size=cell_size,
+        neighborhood="Circle 4.23914982576003 MAP",
+        area_unit_scale_factor="SQUARE_MAP_UNITS"
+    )
+
+    carbon_density_output_raster = os.path.join(output_dir, "carbon_density_" + version_label + ".tif")
+    carbon_density_output.save(carbon_density_output_raster)
+
 
 if clip_inputs_for_testing:
     above_ground_carbon, below_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features)
@@ -361,8 +379,9 @@ if clip_inputs_for_testing:
 #calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 #calc_carbon_in_each_forest_cell(forest, combined_carbon)
 #find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
-
 filter_output(final_output, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
+#calculate_density(final_output_filtered)
+
 
 end_time = datetime.datetime.now()
 duration = end_time - start_time
