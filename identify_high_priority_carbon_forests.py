@@ -1,3 +1,13 @@
+########################################################################################################################
+# Author: Mike Gough
+# Date: 04/15/2025
+# Description: Identifies forested regions that warrant conservation prioritization on the basis of their high carbon
+# density. This determination is made by identifying forested pixels that have a combined above and below-ground carbon
+# density value in the upper 50th percentile of pixels in the same forest class and ecoregion (units are Mg C/ha).
+# The final results are filtered to only include ecoregions in biomes where industrial forestry is occurring or in
+# ecoregions outside of these biomes where the carbon density would be high enough to support commercial logging.
+########################################################################################################################
+
 import arcpy
 from arcpy.sa import Raster
 import datetime
