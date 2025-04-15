@@ -4,7 +4,7 @@ import datetime
 import os
 import csv
 
-#Run from Python window in Pro:
+#Run from Python window in ArcGIS Pro:
 #with open(script_path, 'r') as f:
 #    script_code = f.read()
 #    exec(script_code)
@@ -277,14 +277,14 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
         high_priority_forest_carbon_r.save(final_output)
 
 
-def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
+def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
 
-    # BIOMES to use (Select biomes specified in the input parameter):
+    # Get BIOMES to use (Select biomes specified in the input parameter):
     biomes_to_use_fc = os.path.join(intermediate_gdb, "biomes_to_use_" + version_label)
     query = "BIOME_NAME IN {}".format(biomes_to_include)
     arcpy.Select_analysis(ecoregions_and_biomes, biomes_to_use_fc, query)
 
-    # ECOREGIONS to use (Select ecoregions interest in the CSV that are > MEDIAN carbon value among ecoregions of interest)
+    # Get ECOREGIONS to use (Select ecoregions of interest in the CSV that have > MEDIAN combined forest carbon value among ecoregions of interest)
 
     # Get Ecoregions of Interest from the CSV
     ecoregions_of_interest = []
@@ -302,9 +302,10 @@ def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoreg
     ecoregions_of_interest_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_" + version_label)
     arcpy.Select_analysis(biomes_and_ecoregions, ecoregions_of_interest_fc, query)
 
-    # Calc ZONAL STATS to get the SUM of the carbon density values within each ecoregion
-    ecoregions_of_interest_zonal_stats = os.path.join(intermediate_gdb, "ecoregions_of_interest_zonal_stats" + version_label)
-    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats, "DATA")
+    # Calc ZONAL STATS to get the SUM of the COMBINED FOREST CARBON DENSITY values within each ecoregion
+    ecoregions_of_interest_zonal_stats = os.path.join(intermediate_gdb, "ecoregions_of_interest_zonal_stats_" + version_label)
+    #arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats, "DATA")
+    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", combined_forest_carbon, ecoregions_of_interest_zonal_stats, "DATA")
 
     # Calculate the MEDIAN from the Zonal stats table created above (single number).
     median_zonal_carbon_table = os.path.join(intermediate_gdb, "median_zonal_carbon_table_" + version_label)
@@ -324,7 +325,7 @@ def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoreg
 
     # Get a list of the ecoregions that are > MEDIAN
 
-    # Create a table view that has the ecroegion names of those > MEDIAN
+    # Create a table view that has the ecoregion names of those > MEDIAN
     query = "SUM > {}".format(median_zonal_carbon)
     median_zonal_carbon_table_view = arcpy.MakeTableView_management(ecoregions_of_interest_zonal_stats)
 
@@ -335,14 +336,14 @@ def filter_output(final_output, biomes_to_include, ecoregions_and_biomes, ecoreg
         invert_where_clause=None
     )
 
-    # Get a list of the ecoregion names where the SUM of the carbon is > MEDIAN
+    # Get a list of the ecoregion names where the SUM of the forest carbon is > MEDIAN
     list_of_ecoregions_to_use = []
     with arcpy.da.SearchCursor(ecoregions_of_interest_to_use, "ECO_NAME") as sc:
         for row in sc:
             ecoregion_region_to_use_name = row[0]
             list_of_ecoregions_to_use.append(ecoregion_region_to_use_name)
 
-    # Ecoregions to Use: Select the ecoregions of interest where the SUM of the carbon > MEDIAN to create a new feature class
+    # Ecoregions to Use: Select the ecoregions of interest where the SUM of the forest carbon > MEDIAN to create a new feature class
     query = "ECO_NAME in {}".format(tuple(list_of_ecoregions_to_use))
     ecoregions_of_interest_to_use_fc = os.path.join(intermediate_gdb, "ecoregions_of_interest_to_use_" + version_label)
     arcpy.Select_analysis(biomes_and_ecoregions, ecoregions_of_interest_to_use_fc, query)
@@ -384,7 +385,7 @@ if clip_inputs_for_testing:
 #calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 #calc_carbon_in_each_forest_cell(forest, combined_carbon)
 #find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
-filter_output(final_output, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
+filter_output(final_output, combined_forest_carbon, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
 #calculate_density(final_output_filtered)
 
 
