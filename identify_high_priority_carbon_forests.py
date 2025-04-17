@@ -40,7 +40,6 @@ biomes_to_include = (
 )
 
 ecoregions_of_interest_csv = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Docs\ecoregions_of_interest.csv"
-carbon_for_ecoregion_selection = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Additional_Ecoregion_Selection.gdb\carbon_in_each_forest_cell_1ha_res"
 
 # Data Directory
 data_dir = os.path.join(r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data")
@@ -288,13 +287,30 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
         high_priority_forest_carbon_r.save(final_output)
 
 
-def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
+def filter_output(final_output, carbon_in_each_forest_cell, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
 
     """ Filters the final output to a subset of biomes and ecoregions. Biomes and candidate ecoregions provided by
         Jim Strittholt. Ecoregions to use are selected from the candidate ecoregions. Those with total carbon > MEDIAN
         are kept. Carbon is first projected to an equal area projection at a 1ha resolution so that the original cell
         value units of Mg C/ha become Mg C.
         """
+
+    project_carbon = False  # Should only need to do once.
+    carbon_for_ecoregion_selection = os.path.join(intermediate_gdb, "carbon_in_each_forest_cell_proj_1ha_res")
+
+    if project_carbon:
+        # project to Equal Earth at 100m x 100m (1ha) resolution for calculating total forest carbon in each ecoregion.
+        arcpy.management.ProjectRaster(
+            in_raster=carbon_in_each_forest_cell,
+            out_raster=carbon_for_ecoregion_selection,
+            out_coor_system='PROJCS["WGS_1984_Equal_Earth_Greenwich",GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Equal_Earth"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],UNIT["Meter",1.0]]',
+            resampling_type="NEAREST",
+            cell_size="100 100",
+            geographic_transform=None,
+            Registration_Point=None,
+            in_coor_system='GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]',
+            vertical="NO_VERTICAL"
+        )
 
     # Get BIOMES to use (Select biomes specified in the input parameter):
     biomes_to_use_fc = os.path.join(intermediate_gdb, "biomes_to_use_" + version_label)
@@ -322,7 +338,7 @@ def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecore
     # Calc ZONAL STATS to get the SUM of the COMBINED FOREST CARBON DENSITY values within each ecoregion
     ecoregions_of_interest_zonal_stats = os.path.join(intermediate_gdb, "ecoregions_of_interest_zonal_stats_" + version_label)
     #arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", final_output, ecoregions_of_interest_zonal_stats, "DATA")
-    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", combined_forest_carbon, ecoregions_of_interest_zonal_stats, "DATA")
+    arcpy.sa.ZonalStatisticsAsTable(ecoregions_of_interest_fc, "ECO_NAME", carbon_for_ecoregion_selection, ecoregions_of_interest_zonal_stats, "DATA")
 
     # Calculate the MEDIAN from the Zonal stats table created above (single number).
     median_zonal_carbon_table = os.path.join(intermediate_gdb, "median_zonal_carbon_table_" + version_label)
@@ -404,7 +420,7 @@ if clip_inputs_for_testing:
 #calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 #calc_carbon_in_each_forest_cell(forest, combined_carbon)
 #find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
-filter_output(final_output, carbon_for_ecoregion_selection, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
+filter_output(final_output, carbon_in_each_forest_cell, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
 #calculate_density(final_output_filtered)
 
 
