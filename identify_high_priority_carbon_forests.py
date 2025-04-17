@@ -1,5 +1,6 @@
 ########################################################################################################################
 # Author: Mike Gough
+# Organization: Conservation Biology Institute
 # Date: 04/15/2025
 # Description: Identifies forested regions that warrant conservation prioritization on the basis of their high carbon
 # density. This determination is made by identifying forested pixels that have a combined above and below-ground carbon
