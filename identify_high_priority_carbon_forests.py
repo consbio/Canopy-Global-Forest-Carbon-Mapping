@@ -39,6 +39,7 @@ biomes_to_include = (
 )
 
 ecoregions_of_interest_csv = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Docs\ecoregions_of_interest.csv"
+carbon_for_ecoregion_selection = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Additional_Ecoregion_Selection.gdb\carbon_in_each_forest_cell_1ha_res"
 
 
 # Data Directory
@@ -76,7 +77,7 @@ start_time = datetime.datetime.now()
 print("\nStart Time: " + str(start_time))
 
 
-def create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features):
+def clip_for_testing(above_ground_carbon, below_ground_carbon, forest, clipping_features):
 
     """ Clips the carbon and the forest pixels to a subset of ecoregions for testing on a smaller extent. """
 
@@ -327,8 +328,8 @@ def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecore
         concatenation_separator=""
     )
 
-    # Get the MEDIAN value out of the table.
-    with arcpy.da.SearchCursor(median_zonal_carbon_table, "MEDIAN_SUM") as sc:
+    # Get the MEDIAN value out of the table (table only has one record).
+    with arcpy.da.SearchCursor(median_zonal_carbon_table, "MEDIAN_SUM") as sc:  # field MEDIAN_SUM stores the MEDIAN of the SUMs
         for row in sc:
             median_zonal_carbon = row[0]
         print("Median Zonal Value Threshold: " + str(median_zonal_carbon))
@@ -366,6 +367,7 @@ def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecore
     final_output_filtered_l = arcpy.sa.ExtractByMask(final_output, biome_and_ecoregion_mask)
     final_output_filtered_l.save(final_output_filtered)
 
+
 def calculate_density(final_output_filtered):
 
     raster_to_point_fc = os.path.join(intermediate_dir, "Scratch/Scratch.gdb/raster_to_point_test")
@@ -386,7 +388,7 @@ def calculate_density(final_output_filtered):
 
 
 if clip_inputs_for_testing:
-    above_ground_carbon, below_ground_carbon, forest = create_clipped_inputs(above_ground_carbon, below_ground_carbon, forest, clipping_features)
+    above_ground_carbon, below_ground_carbon, forest = clip_for_testing(above_ground_carbon, below_ground_carbon, forest, clipping_features)
 
 #combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
 #clip_carbon_to_forest_pixels(combined_carbon, forest)
@@ -395,7 +397,7 @@ if clip_inputs_for_testing:
 #calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
 #calc_carbon_in_each_forest_cell(forest, combined_carbon)
 #find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
-filter_output(final_output, combined_forest_carbon, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
+filter_output(final_output, carbon_for_ecoregion_selection, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
 #calculate_density(final_output_filtered)
 
 
