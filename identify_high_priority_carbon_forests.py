@@ -6,6 +6,11 @@
 # density value in the upper 50th percentile of pixels in the same forest class and ecoregion (units are Mg C/ha).
 # The final results are filtered to only include ecoregions in biomes where industrial forestry is occurring or in
 # ecoregions outside of these biomes where the carbon density would be high enough to support commercial logging.
+#
+# To run from Python window in ArcGIS Pro:
+# with open(script_path, 'r') as f:
+#    script_code = f.read()
+#    exec(script_code)
 ########################################################################################################################
 
 import arcpy
@@ -13,11 +18,6 @@ from arcpy.sa import Raster
 import datetime
 import os
 import csv
-
-#Run from Python window in ArcGIS Pro:
-#with open(script_path, 'r') as f:
-#    script_code = f.read()
-#    exec(script_code)
 
 # Source Data
 above_ground_carbon = r"\\loxodonta\gis\Source_Data\biota\global\Global_Aboveground_and_Belowground_Biomass_Carbon_Density\2010\Global_Maps_C_Density_2010_1763\data\aboveground_biomass_carbon_2010.tif"
@@ -40,7 +40,6 @@ biomes_to_include = (
 
 ecoregions_of_interest_csv = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Docs\ecoregions_of_interest.csv"
 carbon_for_ecoregion_selection = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data\Intermediate\Additional_Ecoregion_Selection.gdb\carbon_in_each_forest_cell_1ha_res"
-
 
 # Data Directory
 data_dir = os.path.join(r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Data")
@@ -290,6 +289,12 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
 def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
 
+    """ Filters the final output to a subset of biomes and ecoregions. Biomes and candidate ecoregions provided by
+        Jim Strittholt. Ecoregions to use are selected from the candidate ecoregions. Those with total carbon > MEDIAN
+        are kept. Carbon is first projected to an equal area projection at a 1ha resolution so that the original cell
+        value units of Mg C/ha become Mg C.
+        """
+
     # Get BIOMES to use (Select biomes specified in the input parameter):
     biomes_to_use_fc = os.path.join(intermediate_gdb, "biomes_to_use_" + version_label)
     query = "BIOME_NAME IN {}".format(biomes_to_include)
@@ -369,6 +374,7 @@ def filter_output(final_output, combined_forest_carbon, biomes_to_include, ecore
 
 
 def calculate_density(final_output_filtered):
+    """ (Unused) Test function for calculating point density map from final output. """
 
     raster_to_point_fc = os.path.join(intermediate_dir, "Scratch/Scratch.gdb/raster_to_point_test")
     arcpy.conversion.RasterToPoint( in_raster=final_output_filtered, out_point_features=raster_to_point_fc, raster_field="Value" )
