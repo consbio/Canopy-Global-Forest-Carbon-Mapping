@@ -29,7 +29,10 @@ biomes_and_ecoregions = r"\\loxodonta\gis\Source_Data\boundaries\global\RESOLVE_
 # Input Parameters
 clip_inputs_for_testing = False
 percentile_threshold = 50
-version_label = "50th_percentile"
+carbon_type = "belowground"  # Options: "aboveground", "belowground", or "combined"
+version_label = "50th_percentile_belowground"
+
+# For final clipping/filtering function (not used).
 biomes_to_include = (
     "Boreal Forests/Taiga",
     "Temperate Broadleaf & Mixed Forests",
@@ -39,6 +42,7 @@ biomes_to_include = (
     "Tropical & Subtropical Moist Broadleaf Forests",
 )
 
+# For final clipping/filtering function (not used).
 ecoregions_of_interest_csv = r"P:\Projects3\Canopy_Global_Forest_Carbon_Mapping_mike_gough\Tasks\High_Priority_Carbon_Forests_Analysis\Docs\ecoregions_of_interest.csv"
 
 # Data Directory
@@ -70,7 +74,6 @@ final_output = output_dir + os.sep + "high_priority_forest_carbon_" + version_la
 final_output_filtered = output_dir + os.sep + "high_priority_forest_carbon_filtered_" + version_label + ".tif"
 
 arcpy.env.overwriteOutput = True
-#arcpy.env.snapRaster = forest
 
 start_time = datetime.datetime.now()
 print("\nStart Time: " + str(start_time))
@@ -108,28 +111,37 @@ def clip_for_testing(above_ground_carbon, below_ground_carbon, forest, clipping_
     return above_ground_carbon_clip, below_ground_carbon_clip, forest_clip
 
 
-combined_carbon = intermediate_dir + os.sep + "combined_carbon_" + version_label + ".tif"
+if carbon_type == "combined":
+    carbon_to_use = intermediate_dir + os.sep + "combined_carbon_" + version_label + ".tif"
 
+    def combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon):
 
-def combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon):
+        """ 1. Combines above and below ground carbon by adding them together. """
 
-    """ 1. Combines above and below ground carbon by adding them together. """
+        print("\n1. Combining aboveground and belowground carbon...")
 
-    print("\nCombining aboveground and belowground carbon...")
+        with arcpy.EnvManager(snapRaster=above_ground_carbon):
+            combined_carbon_r = arcpy.sa.Plus(above_ground_carbon, below_ground_carbon)
+            combined_carbon_r.save(carbon_to_use)
 
-    with arcpy.EnvManager(snapRaster=above_ground_carbon):
-        combined_carbon_r = arcpy.sa.Plus(above_ground_carbon, below_ground_carbon)
-        combined_carbon_r.save(combined_carbon)
+elif carbon_type == "aboveground":
+    print("\n* Evaluating Aboveground Carbon only")
+    carbon_to_use = above_ground_carbon
 
+elif carbon_type == "belowground":
+    print("\n* Evaluating Belowground Carbon only")
+    carbon_to_use = below_ground_carbon
 
-combined_forest_carbon = intermediate_dir + os.path.sep + "combined_forest_carbon_" + version_label + ".tif"
+carbon_clipped_to_forest = intermediate_dir + os.path.sep + "carbon_clipped_to_forest_" + version_label + ".tif"
 
 
 def clip_carbon_to_forest_pixels(carbon, forest):
 
-    """ 2. Clips carbon to the forest pixels. """
+    """ 2. Clips carbon to the forest pixels. Not technically necessary since unclipped version can be used for
+        zonal stats.
+    """
 
-    print("\nClipping carbon to forest pixels....")
+    print("\n2. Clipping carbon to forest pixels....")
 
     d = arcpy.Describe(carbon)
     cell_size = d.children[0].meanCellHeight
@@ -139,7 +151,7 @@ def clip_carbon_to_forest_pixels(carbon, forest):
         arcpy.env.cellSize = cell_size
         arcpy.env.snapRaster = carbon
         forest_carbon_r = arcpy.sa.ExtractByMask(carbon, forest)
-        forest_carbon_r.save(combined_forest_carbon)
+        forest_carbon_r.save(carbon_clipped_to_forest)
 
 
 forest_reclassified = intermediate_gdb + os.path.sep + "forest_reclassified_" + version_label
@@ -150,7 +162,7 @@ def reclassify_forests(forest):
 
     """ 3. Reclassifies the forest pixels into classes specified by Jim Strittholt. """
 
-    print("\nReclassifying forest...")
+    print("\n3. Reclassifying forest...")
 
     with arcpy.EnvManager(snapRaster=forest):
 
@@ -170,7 +182,7 @@ def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
 
     """ 4. Creates zones by combining rasterized ecoregions and reclassified forests. """
 
-    print("\nCreating zones by combining rasterized ecoregions and reclassified forests...")
+    print("\n4. Creating zones by combining rasterized ecoregions and reclassified forests...")
 
     d = arcpy.Describe(forest)
     cell_size = d.children[0].meanCellHeight
@@ -199,14 +211,14 @@ def create_zones(biomes_and_ecoregions, value_field, forest_reclassified):
         zones_r.save(zones)
 
 
-thresholds_raster = intermediate_gdb + os.sep + "combined_carbon_thresholds_" + version_label
+thresholds_raster = intermediate_gdb + os.sep + "carbon_thresholds_" + version_label
 
 
 def calc_percentile_threshold(zones, zone_field, carbon, percentile_threshold):
 
     """ 5. Calculating percentile threshold within each zone using zonal statistics. """
 
-    print("\nCalculating percentile threshold within each zone...")
+    print("\n5. Calculating percentile threshold within each zone...")
 
     arcpy.env.snapRaster = zones
 
@@ -231,13 +243,16 @@ def calc_percentile_threshold(zones, zone_field, carbon, percentile_threshold):
 carbon_in_each_forest_cell = intermediate_gdb + os.sep + "carbon_in_each_forest_cell_" + version_label
 
 
-def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
+def calc_carbon_in_each_forest_cell(forest, carbon):
 
-    """ 6. Calculates carbon in each forest cell using zonal statistics (MEAN). """
+    """ 6. Calculates carbon in each forest cell using zonal statistics (MEAN).
+        Each forest pixel must be a unique zone. Consequently, must be converted to points then to raster with a
+        unique ID.
+    """
 
     arcpy.env.snapRaster = forest
 
-    print("\nCalculating carbon in each forest cell....")
+    print("\n6. Calculating carbon in each forest cell....")
 
     print(" -> Converting forest pixels to points...")
 
@@ -267,7 +282,7 @@ def calc_carbon_in_each_forest_cell(forest, combined_forest_carbon):
         carbon_in_each_forest_cell_r = arcpy.sa.ZonalStatistics(
             in_zone_data=forest_raster,
             zone_field="Value",
-            in_value_raster=combined_forest_carbon,
+            in_value_raster=carbon,
             statistics_type="MEAN",
             ignore_nodata="DATA",
         )
@@ -279,7 +294,7 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
     """ 7. Creates High Priority Forest Carbon (Final Output) by selecting carbon pixels above the threshold. """
 
-    print("\nCreating High Priority Forest Carbon....")
+    print("\n7. Creating Final Output (High Priority Forest Carbon)....")
 
     with arcpy.EnvManager(snapRaster=carbon_in_each_forest_cell):
 
@@ -289,10 +304,10 @@ def find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster):
 
 def filter_output(final_output, carbon_in_each_forest_cell, biomes_to_include, ecoregions_and_biomes, ecoregions_of_interest_csv):
 
-    """ Filters the final output to a subset of biomes and ecoregions. Biomes and candidate ecoregions provided by
-        Jim Strittholt. Ecoregions to use are selected from the candidate ecoregions. Those with total carbon > MEDIAN
-        are kept. Carbon is first projected to an equal area projection at a 1ha resolution so that the original cell
-        value units of Mg C/ha become Mg C.
+    """ NOT USED. Filters the final output to a subset of biomes and ecoregions. Biomes and candidate ecoregions
+        provided by Jim Strittholt. Ecoregions to use are selected from the candidate ecoregions. Those with total
+        carbon > MEDIAN are kept. Carbon is first projected to an equal area projection at a 1ha resolution so that the
+        original cell value units of Mg C/ha become Mg C.
         """
 
     project_carbon = False  # Should only need to do once.
@@ -410,19 +425,40 @@ def calculate_density(final_output_filtered):
     carbon_density_output.save(carbon_density_output_raster)
 
 
+# 0. Clip inputs for testing a smaller area.
 if clip_inputs_for_testing:
     above_ground_carbon, below_ground_carbon, forest = clip_for_testing(above_ground_carbon, below_ground_carbon, forest, clipping_features)
 
-#combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
-#clip_carbon_to_forest_pixels(combined_carbon, forest)
-#reclassify_forests(forest)
-#create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
-#calc_percentile_threshold(zones, "Value", combined_carbon, percentile_threshold)
-#calc_carbon_in_each_forest_cell(forest, combined_carbon)
-#find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
-filter_output(final_output, carbon_in_each_forest_cell, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
-#calculate_density(final_output_filtered)
+# 1. Combine Carbon (only if doing a combined above & below-ground carbon run).
+if carbon_type == "combined":
+    combine_above_and_below_carbon(above_ground_carbon, below_ground_carbon)
 
+# 2. Remove Non-Forested Pixels from Carbon to Use (above, below, or combined).
+clip_carbon_to_forest_pixels(carbon_to_use, forest)
+
+# 3. Reclassify the forest dataset into more generalized groups
+reclassify_forests(forest)
+
+# 4. Create zones in which to establish carbon thresholds
+create_zones(biomes_and_ecoregions, "ECO_NAME", forest_reclassified)
+
+# NOTE: For functions 5 & 6, the carbon arguments were set to combined_carbon for 1st run.
+# Tested with carbon_clipped_to_forest (combined). Same result.
+
+# 5. Calculate the carbon threshold for each zone
+calc_percentile_threshold(zones, "Value", carbon_clipped_to_forest, percentile_threshold)
+
+# 6. Calculate the carbon density within each forest pixel
+calc_carbon_in_each_forest_cell(forest, carbon_clipped_to_forest)
+
+# 7. Final Output: Find forest pixels where the carbon density value > zone threshold
+find_carbon_above_threshold(carbon_in_each_forest_cell, thresholds_raster)
+
+# Not Used. Clips final output to a subset of biomes and ecoregions.
+# filter_output(final_output, carbon_in_each_forest_cell, biomes_to_include, biomes_and_ecoregions, ecoregions_of_interest_csv)
+
+# Point Density Test
+#calculate_density(final_output_filtered)
 
 end_time = datetime.datetime.now()
 duration = end_time - start_time
